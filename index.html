@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2d6a62">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="Offline Scripture journal with voice dictation, word counter and Word/PDF export">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Scripture Journal</title>
+<style>
+:root{--bg:#f5f1e8;--card:#fffdf8;--ink:#1d2b2a;--muted:#6b7773;--line:#e2dccd;--accent:#2d6a62;--accent-ink:#fff;--accent-soft:#dcebe7;--gold:#a9792a;--danger:#b3402f;--ok:#2f7d4f;--shadow:0 1px 2px rgba(30,40,38,.06),0 4px 14px rgba(30,40,38,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#141a19;--card:#1c2423;--ink:#e8eeec;--muted:#98a6a2;--line:#2c3836;--accent:#5fb3a6;--accent-ink:#0d1a18;--accent-soft:#1f3532;--gold:#d3a24d;--danger:#e07a68;--ok:#6cc08b;--shadow:none}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+body{min-height:100dvh}
+h1,h2,h3{margin:0}
+.ic{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+#top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:6px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
+#top h1{flex:1;font:600 22px Georgia,'Iowan Old Style','Noto Serif',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#top button[hidden]{display:none}
+#topRight{display:flex;align-items:center;gap:4px}
+.icon{background:none;border:0;color:var(--ink);padding:8px;min-width:44px;min-height:44px;display:inline-grid;place-items:center;border-radius:12px;cursor:pointer}
+.icon.danger{color:var(--danger)}
+#view{max-width:720px;margin:0 auto;padding:14px 16px 120px}
+body.noTabs #view{padding-bottom:130px}
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+#tabs[hidden]{display:none}
+#tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;color:var(--muted);text-decoration:none;font-size:12px}
+#tabs a.on{color:var(--accent);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 12px;box-shadow:var(--shadow)}
+.card h2{font:600 12px system-ui;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 8px;display:flex;justify-content:space-between;gap:8px}
+.cnt{font-weight:500;text-transform:none;letter-spacing:0}
+label{display:block;font-size:13px;color:var(--muted)}
+label>input,label>select{margin-top:4px;color:var(--ink);font-size:16px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:46px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+textarea{font:17px/1.55 Georgia,'Iowan Old Style','Noto Serif',serif;min-height:110px;resize:vertical;field-sizing:content}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.chk{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px;margin:8px 0}
+.chk input{width:22px;height:22px;min-height:0;flex:none;accent-color:var(--accent)}
+.btn{min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 15px system-ui;padding:0 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--danger)}
+.btn.small{min-height:38px;font-size:14px;padding:0 12px}
+.btn:disabled{opacity:.5}
+.muted{color:var(--muted);font-size:14px;margin:6px 0}
+.center{text-align:center}
+.ref{font:600 18px Georgia,serif;color:var(--accent);margin:10px 0 0}
+details>summary{cursor:pointer;font-weight:600;padding:6px 0;min-height:36px}
+.filters{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 14px 12px;margin:10px 0}
+.filters .row,.filters label{margin-top:8px}
+.entry{display:block;text-decoration:none;color:inherit}
+.entry .eh{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.entry .eh b{font:600 17px Georgia,serif}
+.entry .eh span{font-size:13px;white-space:nowrap}
+.snip{margin:6px 0 8px;color:var(--ink);font-family:Georgia,serif;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;background:var(--accent-soft);color:var(--accent);margin-right:6px}
+.chip.ok{background:var(--ok);color:#fff}
+.empty{text-align:center;padding:40px 10px;color:var(--muted)}
+.mic{width:84px;height:84px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin:14px auto 4px;cursor:pointer;box-shadow:var(--shadow)}
+.mic .ic{width:36px;height:36px}
+.mic.live{background:var(--danger);color:#fff;animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(179,64,47,.45)}70%{box-shadow:0 0 0 18px rgba(179,64,47,0)}100%{box-shadow:0 0 0 0 rgba(179,64,47,0)}}
+.live{min-height:24px;text-align:center;font:italic 16px Georgia,serif;color:var(--muted);margin:2px 0}
+.rec{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}
+.rec .rm{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px;gap:8px}
+.rec audio{width:100%;height:40px}
+.rec .row{margin-top:8px}
+#wordbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+#wordbar .in{max-width:720px;margin:0 auto}
+.wb{display:flex;justify-content:space-between;font-size:14px;gap:10px}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;width:0;background:var(--gold);transition:width .2s}
+#wordbar.done .bar>i{background:var(--ok)}
+#wordbar.done #wbLeft{color:var(--ok);font-weight:600}
+#toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);max-width:88vw;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;text-align:center}
+#toast.show{opacity:1}
+#printArea{display:none}
+@media print{
+  html,body{background:#fff;color:#000}
+  #app,#toast{display:none!important}
+  #printArea{display:block;font:12pt/1.5 Georgia,'Times New Roman',serif}
+  #printArea h1{font-size:20pt;margin:0 0 .3em}
+  #printArea h2{font-size:14pt;margin:1.2em 0 .3em;border-bottom:1px solid #999;padding-bottom:.1em}
+  #printArea h3{font-size:10pt;margin:.9em 0 .2em;text-transform:uppercase;letter-spacing:.05em;color:#444}
+  #printArea h3 small{text-transform:none;letter-spacing:0}
+  #printArea p{margin:0 0 .6em}
+  #printArea .pb{break-before:page}
+  @page{margin:2cm}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <button id="backBtn" class="icon" hidden aria-label="Back"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1 id="topTitle">Journal</h1>
+    <div id="topRight"></div>
+  </header>
+  <main id="view"></main>
+  <nav id="tabs">
+    <a href="#list" data-t="list"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg><span>Journal</span></a>
+    <a href="#new" data-t="new"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>New</span></a>
+    <a href="#export" data-t="export"><svg class="ic" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg><span>Export</span></a>
+    <a href="#settings" data-t="settings"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>Settings</span></a>
+  </nav>
+</div>
+<div id="printArea"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Scripture Journal — single-file offline app (no external libraries)
+   ===================================================================== */
+
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+const view = $('#view');
+const ICON = {
+  mic: '<svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  stop: '<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" style="fill:currentColor"/></svg>',
+  trash: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>'
+};
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3600);
+}
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fmtDate = iso => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+};
+const words = t => { const m = (t || '').trim().match(/\S+/g); return m ? m.length : 0; };
+const fmtDur = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+
+/* ---------- Bible: 66 books with chapter counts (1,189 chapters) ---------- */
+const BOOKS = [
+  ['Genesis', 50], ['Exodus', 40], ['Leviticus', 27], ['Numbers', 36], ['Deuteronomy', 34], ['Joshua', 24], ['Judges', 21], ['Ruth', 4],
+  ['1 Samuel', 31], ['2 Samuel', 24], ['1 Kings', 22], ['2 Kings', 25], ['1 Chronicles', 29], ['2 Chronicles', 36], ['Ezra', 10],
+  ['Nehemiah', 13], ['Esther', 10], ['Job', 42], ['Psalms', 150], ['Proverbs', 31], ['Ecclesiastes', 12], ['Song of Solomon', 8],
+  ['Isaiah', 66], ['Jeremiah', 52], ['Lamentations', 5], ['Ezekiel', 48], ['Daniel', 12], ['Hosea', 14], ['Joel', 3], ['Amos', 9],
+  ['Obadiah', 1], ['Jonah', 4], ['Micah', 7], ['Nahum', 3], ['Habakkuk', 3], ['Zephaniah', 3], ['Haggai', 2], ['Zechariah', 14], ['Malachi', 4],
+  ['Matthew', 28], ['Mark', 16], ['Luke', 24], ['John', 21], ['Acts', 28], ['Romans', 16], ['1 Corinthians', 16], ['2 Corinthians', 13],
+  ['Galatians', 6], ['Ephesians', 6], ['Philippians', 4], ['Colossians', 4], ['1 Thessalonians', 5], ['2 Thessalonians', 3],
+  ['1 Timothy', 6], ['2 Timothy', 4], ['Titus', 3], ['Philemon', 1], ['Hebrews', 13], ['James', 5], ['1 Peter', 5], ['2 Peter', 3],
+  ['1 John', 5], ['2 John', 1], ['3 John', 1], ['Jude', 1], ['Revelation', 22]
+];
+const NT_START = 39;
+function bookOptions(sel, first) {
+  let h = `<option value="">${esc(first || 'Select book…')}</option><optgroup label="Old Testament">`;
+  BOOKS.forEach(([n], i) => {
+    if (i === NT_START) h += '</optgroup><optgroup label="New Testament">';
+    h += `<option${n === sel ? ' selected' : ''}>${esc(n)}</option>`;
+  });
+  return h + '</optgroup>';
+}
+function chapterOptions(book, sel) {
+  const b = BOOKS.find(x => x[0] === book);
+  let h = '<option value="0">Chapter…</option>';
+  if (!b) return h;
+  for (let c = 1; c <= b[1]; c++) h += `<option value="${c}"${c === sel ? ' selected' : ''}>${c}</option>`;
+  return h;
+}
+
+/* ---------- settings ---------- */
+const DEFAULTS = {
+  goal: 200, scope: 'reflection', lang: 'fil-PH', voiceMode: 'both', name: '', course: '',
+  gClientId: '', gFileId: '', autoDrive: false, driveAudio: false, lastBackup: 0, lastDrive: 0, dirty: false,
+  exSections: { scripture: true, reflection: true, prayer: true }, pageBreak: true
+};
+let S;
+try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('sj.settings') || '{}') }; } catch { S = { ...DEFAULTS }; }
+S.exSections = { ...DEFAULTS.exSections, ...(S.exSections || {}) };
+const saveSettings = () => { try { localStorage.setItem('sj.settings', JSON.stringify(S)); } catch { } };
+const LANGS = [['fil-PH', 'Tagalog'], ['en-PH', 'English (Philippines)'], ['en-US', 'English (US)'], ['ceb-PH', 'Cebuano (may not be supported)']];
+const langName = c => (LANGS.find(l => l[0] === c) || [c, c])[1].replace(' (may not be supported)', '');
+
+/* ---------- storage (IndexedDB: entries + audio) ---------- */
+let db, ENTRIES = [];
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('scripture-journal', 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('entries', { keyPath: 'id' }); d.createObjectStore('audio', { keyPath: 'id' }); };
+    r.onsuccess = () => { db = r.result; res(db); };
+    r.onerror = () => rej(r.error);
+  });
+}
+const idbReq = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const store = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
+const dbAll = n => idbReq(store(n).getAll());
+const dbGet = (n, id) => idbReq(store(n).get(id));
+const dbPut = (n, v) => idbReq(store(n, 'readwrite').put(v));
+const dbDel = (n, id) => idbReq(store(n, 'readwrite').delete(id));
+
+/* ---------- entry model ---------- */
+const newEntry = () => ({ id: uid(), date: today(), book: '', chapter: 0, vFrom: 0, vTo: 0, scripture: '', reflection: '', prayer: '', recordings: [], createdAt: Date.now(), updatedAt: Date.now() });
+const refOf = e => {
+  if (!e.book) return '';
+  let r = e.book;
+  if (e.chapter) { r += ' ' + e.chapter; if (e.vFrom) { r += ':' + e.vFrom; if (e.vTo && e.vTo > e.vFrom) r += '-' + e.vTo; } }
+  return r;
+};
+const countFor = e => {
+  if (S.scope === 'all') return words(e.scripture) + words(e.reflection) + words(e.prayer);
+  if (S.scope === 'reflection+prayer') return words(e.reflection) + words(e.prayer);
+  return words(e.reflection);
+};
+const scopeLabel = () => ({ all: 'All sections', 'reflection+prayer': 'Reflection + prayer', reflection: 'Reflection' }[S.scope] || 'Reflection');
+const isBlank = e => !e.book && !e.scripture.trim() && !e.reflection.trim() && !e.prayer.trim() && !e.recordings.length;
+
+/* ---------- routing ---------- */
+let E = null; // current editor state
+function setChrome(o) {
+  $('#topTitle').textContent = o.title;
+  $('#backBtn').hidden = !o.back;
+  $('#tabs').hidden = !o.tabs;
+  document.body.classList.toggle('noTabs', !o.tabs);
+  $$('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.t === o.active));
+  $('#topRight').innerHTML = o.right || '';
+  window.scrollTo(0, 0);
+}
+$('#backBtn').onclick = () => { location.hash = '#list'; };
+async function route() {
+  await leaveEditor();
+  const [name, arg] = (location.hash.slice(1) || 'list').split('/');
+  if (name === 'edit') return showEditor(arg);
+  if (name === 'new') return showEditor(null);
+  if (name === 'settings') return showSettings();
+  if (name === 'export') return showExport();
+  return showList();
+}
+let routeChain = Promise.resolve();
+window.addEventListener('hashchange', () => { routeChain = routeChain.then(route).catch(console.error); });
+
+/* =====================================================================
+   LIST + SEARCH
+   ===================================================================== */
+const F = { q: '', from: '', to: '', book: '' };
+function matches(e) {
+  if (F.from && e.date < F.from) return false;
+  if (F.to && e.date > F.to) return false;
+  if (F.book && e.book !== F.book) return false;
+  const q = F.q.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [refOf(e), e.date, fmtDate(e.date), e.scripture, e.reflection, e.prayer].join('\n').toLowerCase();
+  return q.split(/\s+/).every(t => hay.includes(t));
+}
+function showList() {
+  setChrome({ title: 'Journal', tabs: true, active: 'list' });
+  view.innerHTML = `
+    <input id="q" type="search" placeholder="Search words, passage (John 3), or date" value="${esc(F.q)}" aria-label="Search">
+    <details class="filters"${(F.from || F.to || F.book) ? ' open' : ''}><summary>Filters</summary>
+      <div class="row"><label>From<input type="date" id="qf" value="${esc(F.from)}"></label><label>To<input type="date" id="qt" value="${esc(F.to)}"></label></div>
+      <label>Book<select id="qb">${bookOptions(F.book, 'Any book')}</select></label>
+      <div class="stack"><button class="btn small" id="qclear">Clear filters</button></div>
+    </details>
+    <p class="muted" id="resCount"></p><div id="results"></div>`;
+  $('#q').oninput = e => { F.q = e.target.value; renderResults(); };
+  $('#qf').onchange = e => { F.from = e.target.value; renderResults(); };
+  $('#qt').onchange = e => { F.to = e.target.value; renderResults(); };
+  $('#qb').onchange = e => { F.book = e.target.value; renderResults(); };
+  $('#qclear').onclick = () => { F.q = F.from = F.to = F.book = ''; showList(); };
+  renderResults();
+}
+function renderResults() {
+  const list = ENTRIES.filter(matches).sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt);
+  const total = ENTRIES.length;
+  $('#resCount').textContent = total ? (list.length === total ? `${total} entr${total === 1 ? 'y' : 'ies'}` : `${list.length} of ${total} entries`) : '';
+  if (!list.length) {
+    $('#results').innerHTML = total
+      ? '<div class="empty">No entries match your search.</div>'
+      : '<div class="empty"><p>No entries yet.</p><a class="btn primary" href="#new">Write your first entry</a></div>';
+    return;
+  }
+  $('#results').innerHTML = list.map(e => {
+    const n = countFor(e), snip = (e.reflection || e.scripture || e.prayer || '').trim().replace(/\s+/g, ' ').slice(0, 160);
+    return `<a class="card entry" href="#edit/${esc(e.id)}">
+      <div class="eh"><b>${esc(refOf(e) || 'No passage chosen')}</b><span class="muted">${esc(fmtDate(e.date))}</span></div>
+      ${snip ? `<p class="snip">${esc(snip)}</p>` : ''}
+      <div><span class="chip${S.goal && n >= S.goal ? ' ok' : ''}">${n} words</span>${e.recordings.length ? `<span class="chip">${e.recordings.length} audio</span>` : ''}</div>
+    </a>`;
+  }).join('');
+}
+
+/* =====================================================================
+   EDITOR
+   ===================================================================== */
+async function showEditor(id) {
+  let entry = id ? ENTRIES.find(x => x.id === id) : null;
+  if (id && !entry) { toast('That entry was not found.'); history.replaceState(null, '', '#list'); return showList(); }
+  const fresh = !entry;
+  if (fresh) entry = newEntry();
+  E = { entry, saved: !fresh, timer: null, urls: [] };
+  setChrome({
+    title: fresh ? 'New entry' : 'Entry', back: true, tabs: false,
+    right: `<span class="muted" id="saveState"></span>${fresh ? '' : `<button class="icon danger" id="delBtn" aria-label="Delete entry">${ICON.trash}</button>`}`
+  });
+  view.innerHTML = `
+    <section class="card"><label>Date<input type="date" id="f_date"></label></section>
+    <section class="card">
+      <h2>Passage</h2>
+      <div class="row"><select id="f_book" aria-label="Book">${bookOptions(entry.book)}</select><select id="f_chapter" aria-label="Chapter">${chapterOptions(entry.book, entry.chapter)}</select></div>
+      <div class="row" style="margin-top:10px">
+        <label>Verse from<input id="f_vFrom" type="number" inputmode="numeric" min="1" max="176" placeholder="e.g. 16"></label>
+        <label>to (optional)<input id="f_vTo" type="number" inputmode="numeric" min="1" max="176" placeholder="e.g. 18"></label>
+      </div>
+      <p class="ref" id="refPrev"></p>
+    </section>
+    <section class="card"><h2>Scripture <span class="cnt" id="c_scripture"></span></h2><textarea id="f_scripture" rows="4" placeholder="The verses you read — type, paste or dictate"></textarea></section>
+    <section class="card"><h2>Reflection <span class="cnt" id="c_reflection"></span></h2><textarea id="f_reflection" rows="7" placeholder="What is this passage saying to you?"></textarea></section>
+    <section class="card"><h2>Prayer <span class="cnt" id="c_prayer"></span></h2><textarea id="f_prayer" rows="4" placeholder="Write your prayer"></textarea></section>
+    <section class="card" id="voiceCard">
+      <h2>Voice</h2>
+      <div class="row">
+        <label>Mode<select id="v_mode">
+          <option value="both">Text + audio</option><option value="text">Text only</option><option value="audio">Audio only</option></select></label>
+        <label>Language<select id="v_lang">${LANGS.map(l => `<option value="${l[0]}">${esc(l[1])}</option>`).join('')}</select></label>
+      </div>
+      <label style="margin-top:10px">Put dictated text in<select id="v_target">
+        <option value="reflection">Reflection</option><option value="prayer">Prayer</option><option value="scripture">Scripture</option></select></label>
+      <button class="mic" id="micBtn" aria-label="Start">${ICON.mic}</button>
+      <p class="center muted" id="vTimer">Tap to start</p>
+      <p class="live" id="liveText"></p>
+      <p class="muted center" id="vStatus"></p>
+      <details><summary>Voice tips</summary>
+        <p class="muted">Turning speech into text uses your phone's speech service and needs internet. Writing, saving, recording audio and everything else works offline.</p>
+        <p class="muted">Cebuano may not be offered by the speech service. If it fails, use Tagalog or English, or tap the microphone key on your keyboard (Gboard) inside any text box above.</p>
+        <p class="muted">If text doesn't appear, or the recording is silent, in “Text + audio” mode, your phone may allow only one microphone user at a time. Use “Text only”, then record separately with “Audio only”.</p>
+      </details>
+      <h2 style="margin-top:16px">Recordings</h2><div id="recList"></div>
+    </section>
+    <div id="wordbar"><div class="in">
+      <div class="wb"><span><b id="wcNum">0</b> / <span id="wcGoal"></span> words <span class="muted" id="wcScope"></span></span><span id="wbLeft"></span></div>
+      <div class="bar"><i id="wcFill"></i></div>
+      <div class="wb muted" style="margin-top:4px"><span>Total in entry: <span id="wcTotal">0</span></span></div>
+    </div></div>`;
+
+  $('#f_date').value = entry.date;
+  $('#f_vFrom').value = entry.vFrom || '';
+  $('#f_vTo').value = entry.vTo || '';
+  ['scripture', 'reflection', 'prayer'].forEach(k => {
+    const ta = $('#f_' + k); ta.value = entry[k];
+    ta.addEventListener('input', () => { entry[k] = ta.value; touch(); });
+  });
+  $('#f_date').onchange = ev => { entry.date = ev.target.value || today(); touch(); };
+  $('#f_book').onchange = ev => { entry.book = ev.target.value; entry.chapter = 0; entry.vFrom = entry.vTo = 0; $('#f_vFrom').value = $('#f_vTo').value = ''; $('#f_chapter').innerHTML = chapterOptions(entry.book, 0); touch(); };
+  $('#f_chapter').onchange = ev => { entry.chapter = +ev.target.value || 0; touch(); };
+  const verse = (k, ev) => { let n = parseInt(ev.target.value, 10); if (!(n > 0)) n = 0; if (n > 176) n = 176; entry[k] = n; touch(); };
+  $('#f_vFrom').oninput = ev => verse('vFrom', ev);
+  $('#f_vTo').oninput = ev => verse('vTo', ev);
+  if ($('#delBtn')) $('#delBtn').onclick = deleteEntry;
+
+  $('#v_mode').value = S.voiceMode; $('#v_lang').value = S.lang;
+  $('#v_mode').onchange = ev => { S.voiceMode = ev.target.value; saveSettings(); };
+  $('#v_lang').onchange = ev => { S.lang = ev.target.value; saveSettings(); };
+  $('#micBtn').onclick = () => (voice.active ? stopVoice() : startVoice());
+  $('#recList').onclick = async ev => {
+    const b = ev.target.closest('[data-del]'); if (!b) return;
+    if (!confirm('Delete this recording?')) return;
+    const rid = b.dataset.del;
+    entry.recordings = entry.recordings.filter(r => r.id !== rid);
+    await dbDel('audio', rid).catch(() => { });
+    touch(); await saveNow(); renderRecordings();
+  };
+  updateDerived(); renderRecordings();
+  if (fresh) setTimeout(() => $('#f_book') && $('#f_book').focus(), 50);
+}
+function touch() {
+  if (!E) return;
+  E.entry.updatedAt = Date.now();
+  updateDerived();
+  const s = $('#saveState'); if (s) s.textContent = 'Saving…';
+  clearTimeout(E.timer); E.timer = setTimeout(saveNow, 700);
+}
+function updateDerived() {
+  if (!E) return;
+  const e = E.entry, n = countFor(e), goal = S.goal || 0;
+  $('#refPrev').textContent = refOf(e) || 'Choose a book and chapter';
+  $('#wcNum').textContent = n; $('#wcGoal').textContent = goal; $('#wcScope').textContent = '· ' + scopeLabel();
+  $('#wcFill').style.width = (goal ? Math.min(100, n / goal * 100) : 0) + '%';
+  $('#wordbar').classList.toggle('done', !!goal && n >= goal);
+  $('#wbLeft').textContent = !goal ? '' : n >= goal ? 'Goal reached' : (goal - n) + ' to go';
+  $('#wcTotal').textContent = words(e.scripture) + words(e.reflection) + words(e.prayer);
+  ['scripture', 'reflection', 'prayer'].forEach(k => { const c = $('#c_' + k); if (c) c.textContent = words(e[k]) + ' words'; });
+}
+async function saveNow() {
+  if (!E) return;
+  clearTimeout(E.timer); E.timer = null;
+  const e = E.entry;
+  if (isBlank(e) && !E.saved) return;
+  e.updatedAt = Date.now();
+  await dbPut('entries', e);
+  if (!ENTRIES.includes(e)) ENTRIES.push(e);
+  if (!E.saved) {
+    E.saved = true;
+    history.replaceState(null, '', '#edit/' + e.id);
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { });
+  }
+  markDirty();
+  const s = $('#saveState'); if (s) s.textContent = 'Saved';
+}
+async function leaveEditor() {
+  if (!E) return;
+  await stopVoice();
+  await saveNow();
+  E.urls.forEach(u => URL.revokeObjectURL(u));
+  E = null;
+}
+async function deleteEntry() {
+  if (!E || !confirm('Delete this entry and its recordings? This cannot be undone.')) return;
+  const e = E.entry;
+  clearTimeout(E.timer);
+  await stopVoice();
+  for (const r of e.recordings) await dbDel('audio', r.id).catch(() => { });
+  await dbDel('entries', e.id);
+  ENTRIES = ENTRIES.filter(x => x.id !== e.id);
+  E.saved = false; E.entry = { ...e, id: '__deleted__', book: '', scripture: '', reflection: '', prayer: '', recordings: [] };
+  markDirty();
+  toast('Entry deleted');
+  location.hash = '#list';
+}
+async function renderRecordings() {
+  if (!E) return;
+  const box = $('#recList'), e = E.entry;
+  E.urls.forEach(u => URL.revokeObjectURL(u)); E.urls = [];
+  if (!e.recordings.length) { box.innerHTML = '<p class="muted">No recordings yet.</p>'; return; }
+  box.innerHTML = '';
+  for (const r of e.recordings) {
+    const rec = await dbGet('audio', r.id).catch(() => null);
+    if (!E || E.entry !== e) return;
+    let url = '';
+    if (rec && rec.blob) { url = URL.createObjectURL(rec.blob); E.urls.push(url); }
+    const ext = /mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm';
+    const when = new Date(r.createdAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const div = document.createElement('div'); div.className = 'rec';
+    div.innerHTML = `<div class="rm"><span>${esc(when)} · ${esc(langName(r.lang))} · ${esc(r.section)}</span><span>${fmtDur(r.duration || 0)}</span></div>
+      ${url ? `<audio controls preload="none" src="${url}"></audio>` : '<p class="muted">Audio file is missing.</p>'}
+      <div class="row">${url ? `<a class="btn small" href="${url}" download="journal-${esc(e.date)}-${esc(r.id.slice(0, 6))}.${ext}">Save audio</a>` : ''}<button class="btn small danger" data-del="${esc(r.id)}">Delete</button></div>`;
+    box.appendChild(div);
+  }
+}
+
+/* ---------- voice: dictation (Web Speech) + audio recording (MediaRecorder) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voice = { active: false, rec: null, mr: null, stream: null, chunks: [], startedAt: 0, target: 'reflection', lang: 'fil-PH', mode: 'both', fatalSR: false, rapid: 0, lastStart: 0, tick: null };
+function pickMime() {
+  if (!window.MediaRecorder) return '';
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+}
+function vStatus(msg) { const s = $('#vStatus'); if (s) s.textContent = msg || ''; }
+function setMicUI(on) {
+  const b = $('#micBtn'); if (!b) return;
+  b.classList.toggle('live', on); b.innerHTML = on ? ICON.stop : ICON.mic; b.setAttribute('aria-label', on ? 'Stop' : 'Start');
+  ['v_mode', 'v_lang', 'v_target'].forEach(i => { const el = $('#' + i); if (el) el.disabled = on; });
+}
+function appendText(field, text) {
+  if (!text || !E) return;
+  const e = E.entry, cur = e[field] || '';
+  e[field] = cur + (cur && !/\s$/.test(cur) ? ' ' : '') + text;
+  const ta = $('#f_' + field); if (ta) ta.value = e[field];
+  touch();
+}
+async function startVoice() {
+  if (voice.active || !E) return;
+  const mode = $('#v_mode').value, wantAudio = mode !== 'text', wantText = mode !== 'audio';
+  if (wantText && !SR && !wantAudio) { vStatus('This browser cannot turn speech into text. Use Chrome, or choose “Audio only”.'); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices) { vStatus('The microphone needs a secure (https) connection.'); return; }
+  Object.assign(voice, { mode, target: $('#v_target').value, lang: $('#v_lang').value, fatalSR: !wantText || !SR, rapid: 0, chunks: [], mr: null, stream: null });
+  vStatus('');
+  if (wantAudio) {
+    try {
+      voice.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickMime();
+      voice.mr = new MediaRecorder(voice.stream, mime ? { mimeType: mime } : undefined);
+      voice.mr.ondataavailable = ev => { if (ev.data && ev.data.size) voice.chunks.push(ev.data); };
+      voice.mr.start(1000);
+    } catch (err) {
+      vStatus(err && err.name === 'NotAllowedError' ? 'Microphone permission was denied. Allow it in Chrome’s site settings.' : 'Could not open the microphone: ' + (err && err.message || err));
+      if (voice.stream) voice.stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+  }
+  voice.active = true; voice.entry = E.entry; voice.startedAt = Date.now();
+  setMicUI(true);
+  clearInterval(voice.tick);
+  voice.tick = setInterval(() => { const t = $('#vTimer'); if (t) t.textContent = 'Recording ' + fmtDur(Math.round((Date.now() - voice.startedAt) / 1000)); }, 500);
+  $('#vTimer').textContent = 'Recording 0:00';
+  if (wantText) {
+    if (!SR) vStatus('Speech-to-text isn’t available in this browser — recording audio only.');
+    else startRecognition();
+  }
+}
+function startRecognition() {
+  if (!voice.active || voice.fatalSR || !SR) return;
+  const now = Date.now();
+  voice.rapid = now - voice.lastStart < 600 ? voice.rapid + 1 : 0;
+  voice.lastStart = now;
+  if (voice.rapid >= 5) { voice.fatalSR = true; vStatus('Speech-to-text keeps stopping on this phone. ' + (voice.mr ? 'Your audio is still being recorded.' : 'Try “Audio only” mode.')); return; }
+  const r = new SR();
+  r.lang = voice.lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+  r.onresult = ev => {
+    let interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const res = ev.results[i], t = res[0].transcript;
+      if (res.isFinal) appendText(voice.target, t.trim()); else interim += t;
+    }
+    const l = $('#liveText'); if (l) l.textContent = interim;
+  };
+  r.onerror = ev => {
+    const code = ev.error, audioNote = voice.mr ? ' Audio is still being recorded.' : '';
+    if (code === 'no-speech' || code === 'aborted') return;
+    voice.fatalSR = true;
+    if (code === 'not-allowed' || code === 'service-not-allowed') vStatus('Speech-to-text was blocked. Allow the microphone for this site.' + audioNote);
+    else if (code === 'language-not-supported') vStatus('That language isn’t supported for speech-to-text. Try Tagalog or English, or use your keyboard’s microphone key.' + audioNote);
+    else if (code === 'network') vStatus('Speech-to-text needs internet right now.' + audioNote);
+    else if (code === 'audio-capture') vStatus('The microphone is busy. Try “Text only” mode.' + audioNote);
+    else vStatus('Speech-to-text stopped (' + code + ').' + audioNote);
+  };
+  r.onend = () => {
+    const l = $('#liveText'); if (l) l.textContent = '';
+    if (voice.active && !voice.fatalSR) setTimeout(() => { if (voice.active) startRecognition(); }, 250);
+  };
+  voice.rec = r;
+  try { r.start(); } catch { }
+}
+async function stopVoice() {
+  if (!voice.active) return;
+  voice.active = false;
+  clearInterval(voice.tick);
+  try { voice.rec && voice.rec.stop(); } catch { }
+  let blob = null;
+  if (voice.mr) {
+    if (voice.mr.state !== 'inactive') {
+      await new Promise(res => { voice.mr.addEventListener('stop', res, { once: true }); try { voice.mr.stop(); } catch { res(); } });
+    }
+    blob = new Blob(voice.chunks, { type: voice.mr.mimeType || 'audio/webm' });
+  }
+  if (voice.stream) voice.stream.getTracks().forEach(t => t.stop());
+  const dur = Math.round((Date.now() - voice.startedAt) / 1000), e = voice.entry;
+  voice.mr = null; voice.stream = null; voice.rec = null;
+  setMicUI(false);
+  const t = $('#vTimer'); if (t) t.textContent = 'Tap to start';
+  const l = $('#liveText'); if (l) l.textContent = '';
+  if (blob && blob.size > 800 && e) {
+    const id = uid();
+    await dbPut('audio', { id, entryId: e.id, blob });
+    e.recordings.push({ id, createdAt: Date.now(), section: voice.target, lang: voice.lang, duration: dur, mime: blob.type, size: blob.size });
+    if (E && E.entry === e) { touch(); await saveNow(); renderRecordings(); vStatus('Saved a ' + fmtDur(dur) + ' recording.'); }
+    else { e.updatedAt = Date.now(); await dbPut('entries', e); if (!ENTRIES.includes(e)) ENTRIES.push(e); markDirty(); }
+  }
+}
+
+/* =====================================================================
+   EXPORT: Word (.docx, built from scratch) and PDF (print dialog)
+   ===================================================================== */
+/*ZIP-START*/
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files, mime) {
+  const enc = new TextEncoder(), parts = [], cd = []; let off = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const f of files) {
+    const nm = enc.encode(f.name), data = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(data), sz = data.length;
+    const lh = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    parts.push(lh, nm, data);
+    cd.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += lh.length + nm.length + sz;
+  }
+  const cdSize = cd.reduce((a, b) => a + b.length, 0);
+  const end = new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...cd, end], { type: mime || 'application/zip' });
+}
+const xesc = s => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function wRun(text, o = {}) {
+  const sz = o.size || 24;
+  return `<w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/>${o.b ? '<w:b/>' : ''}${o.i ? '<w:i/>' : ''}${o.color ? `<w:color w:val="${o.color}"/>` : ''}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${xesc(text)}</w:t></w:r>`;
+}
+const wPara = (runs, o = {}) => `<w:p><w:pPr>${o.pb ? '<w:pageBreakBefore/>' : ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after ?? 120}" w:line="300" w:lineRule="auto"/></w:pPr>${runs}</w:p>`;
+const wText = t => (t || '').split(/\r?\n/).map(line => wPara(wRun(line))).join('');
+function docxFromParts(bodyXml) {
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
+  const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+  return makeZip([{ name: '[Content_Types].xml', data: types }, { name: '_rels/.rels', data: rels }, { name: 'word/document.xml', data: doc }], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+/*ZIP-END*/
+function buildDocx(list) {
+  const b = [], sec = S.exSections;
+  b.push(wPara(wRun('Scripture Journal', { b: 1, size: 40 }), { after: 120 }));
+  if (S.name) b.push(wPara(wRun('Name: ', { b: 1 }) + wRun(S.name), { after: 40 }));
+  if (S.course) b.push(wPara(wRun('Course / Professor: ', { b: 1 }) + wRun(S.course), { after: 40 }));
+  list.forEach((e, i) => {
+    const head = fmtDate(e.date) + (refOf(e) ? '  —  ' + refOf(e) : '');
+    b.push(wPara(wRun(head, { b: 1, size: 28, color: '2D6A62' }), { pb: S.pageBreak && i > 0, before: S.pageBreak && i > 0 ? 0 : 360, after: 120 }));
+    if (sec.scripture && e.scripture.trim()) { b.push(wPara(wRun('SCRIPTURE', { b: 1, size: 18, color: '6B7773' }), { after: 40 })); b.push(wText(e.scripture)); }
+    if (sec.reflection && e.reflection.trim()) { b.push(wPara(wRun('REFLECTION', { b: 1, size: 18, color: '6B7773' }) + wRun('   ' + words(e.reflection) + ' words', { size: 18, color: '6B7773' }), { after: 40 })); b.push(wText(e.reflection)); }
+    if (sec.prayer && e.prayer.trim()) { b.push(wPara(wRun('PRAYER', { b: 1, size: 18, color: '6B7773' }), { after: 40 })); b.push(wText(e.prayer)); }
+  });
+  return docxFromParts(b.join(''));
+}
+function printHTML(list) {
+  const sec = S.exSections, para = t => esc(t).split(/\r?\n/).map(l => `<p>${l || '&nbsp;'}</p>`).join('');
+  let h = '<h1>Scripture Journal</h1>';
+  if (S.name) h += `<p><b>Name:</b> ${esc(S.name)}</p>`;
+  if (S.course) h += `<p><b>Course / Professor:</b> ${esc(S.course)}</p>`;
+  list.forEach((e, i) => {
+    h += `<section class="${S.pageBreak && i > 0 ? 'pb' : ''}"><h2>${esc(fmtDate(e.date))}${refOf(e) ? ' — ' + esc(refOf(e)) : ''}</h2>`;
+    if (sec.scripture && e.scripture.trim()) h += '<h3>Scripture</h3>' + para(e.scripture);
+    if (sec.reflection && e.reflection.trim()) h += `<h3>Reflection <small>(${words(e.reflection)} words)</small></h3>` + para(e.reflection);
+    if (sec.prayer && e.prayer.trim()) h += '<h3>Prayer</h3>' + para(e.prayer);
+    h += '</section>';
+  });
+  return h;
+}
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+}
+const XF = { from: '', to: '' };
+const exportList = () => ENTRIES.filter(e => (!XF.from || e.date >= XF.from) && (!XF.to || e.date <= XF.to)).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
+function showExport() {
+  setChrome({ title: 'Export', tabs: true, active: 'export' });
+  view.innerHTML = `
+    <section class="card"><h2>Header on the document</h2>
+      <label>Your name<input id="x_name" autocomplete="name"></label>
+      <label style="margin-top:10px">Course / professor (optional)<input id="x_course"></label></section>
+    <section class="card"><h2>Which entries</h2>
+      <div class="row"><label>From<input type="date" id="x_from"></label><label>To<input type="date" id="x_to"></label></div>
+      <p class="muted" id="x_count"></p></section>
+    <section class="card"><h2>Include</h2>
+      <label class="chk"><input type="checkbox" id="x_scr"> Scripture</label>
+      <label class="chk"><input type="checkbox" id="x_ref"> Reflection (with word count)</label>
+      <label class="chk"><input type="checkbox" id="x_pra"> Prayer</label>
+      <label class="chk"><input type="checkbox" id="x_pb"> Start each entry on a new page</label></section>
+    <div class="stack"><button class="btn primary" id="x_docx">Download Word file (.docx)</button>
+      <button class="btn" id="x_pdf">Save as PDF…</button>
+      <p class="muted">For PDF, a print screen opens — choose “Save as PDF” as the printer.</p></div>`;
+  $('#x_name').value = S.name; $('#x_course').value = S.course; $('#x_from').value = XF.from; $('#x_to').value = XF.to;
+  $('#x_scr').checked = S.exSections.scripture; $('#x_ref').checked = S.exSections.reflection; $('#x_pra').checked = S.exSections.prayer; $('#x_pb').checked = S.pageBreak;
+  const count = () => { const n = exportList().length; $('#x_count').textContent = n + (n === 1 ? ' entry' : ' entries') + ' will be included, oldest first.'; };
+  $('#x_name').oninput = ev => { S.name = ev.target.value; saveSettings(); };
+  $('#x_course').oninput = ev => { S.course = ev.target.value; saveSettings(); };
+  $('#x_from').onchange = ev => { XF.from = ev.target.value; count(); };
+  $('#x_to').onchange = ev => { XF.to = ev.target.value; count(); };
+  $('#x_scr').onchange = ev => { S.exSections.scripture = ev.target.checked; saveSettings(); };
+  $('#x_ref').onchange = ev => { S.exSections.reflection = ev.target.checked; saveSettings(); };
+  $('#x_pra').onchange = ev => { S.exSections.prayer = ev.target.checked; saveSettings(); };
+  $('#x_pb').onchange = ev => { S.pageBreak = ev.target.checked; saveSettings(); };
+  $('#x_docx').onclick = () => {
+    const l = exportList(); if (!l.length) return toast('No entries in that date range.');
+    download(buildDocx(l), `Scripture-Journal_${l[0].date}_to_${l[l.length - 1].date}.docx`);
+  };
+  $('#x_pdf').onclick = () => {
+    const l = exportList(); if (!l.length) return toast('No entries in that date range.');
+    $('#printArea').innerHTML = printHTML(l); setTimeout(() => window.print(), 150);
+  };
+  count();
+}
+
+/* =====================================================================
+   BACKUP / RESTORE + optional Google Drive sync
+   ===================================================================== */
+const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+const b64ToBlob = (b64, mime) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: mime }); };
+async function buildBackup(includeAudio) {
+  const audio = [];
+  if (includeAudio) {
+    for (const e of ENTRIES) for (const r of e.recordings) {
+      const a = await dbGet('audio', r.id).catch(() => null);
+      if (a && a.blob) audio.push({ id: r.id, entryId: e.id, mime: a.blob.type || r.mime, data: await blobToB64(a.blob) });
+    }
+  }
+  return new Blob([JSON.stringify({ app: 'scripture-journal', version: 1, exportedAt: new Date().toISOString(), entries: ENTRIES, audio })], { type: 'application/json' });
+}
+async function importBackup(text) {
+  const j = JSON.parse(text);
+  if (j.app !== 'scripture-journal' || !Array.isArray(j.entries)) throw new Error('This is not a Scripture Journal backup file.');
+  let added = 0, updated = 0, same = 0;
+  for (const inc of j.entries) {
+    inc.recordings = inc.recordings || [];
+    const cur = ENTRIES.find(e => e.id === inc.id);
+    if (!cur) { await dbPut('entries', inc); ENTRIES.push(inc); added++; }
+    else if ((inc.updatedAt || 0) > (cur.updatedAt || 0)) { await dbPut('entries', inc); ENTRIES[ENTRIES.indexOf(cur)] = inc; updated++; }
+    else same++;
+  }
+  for (const a of (j.audio || [])) { if (!(await dbGet('audio', a.id))) await dbPut('audio', { id: a.id, entryId: a.entryId, blob: b64ToBlob(a.data, a.mime) }); }
+  return { added, updated, same };
+}
+const stamp = () => today();
+async function shareOrDownload(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Scripture Journal backup' }); return 'shared'; }
+    catch (err) { if (err && err.name === 'AbortError') return 'cancelled'; }
+  }
+  download(blob, name); return 'downloaded';
+}
+
+/* Google Drive (optional; needs the person's own OAuth client ID) */
+const GD = { token: null, exp: 0 };
+function loadGIS() {
+  return new Promise((res, rej) => {
+    if (window.google && google.accounts && google.accounts.oauth2) return res();
+    const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = res; s.onerror = () => rej(new Error('Could not reach Google sign-in. Check your internet connection.'));
+    document.head.appendChild(s);
+  });
+}
+async function getToken(interactive) {
+  if (GD.token && Date.now() < GD.exp - 60000) return GD.token;
+  if (!S.gClientId) throw new Error('Add your Google Client ID in Settings first.');
+  await loadGIS();
+  return new Promise((resolve, reject) => {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: S.gClientId, scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: r => { if (r.error) return reject(new Error(r.error_description || r.error)); GD.token = r.access_token; GD.exp = Date.now() + (r.expires_in || 3600) * 1000; resolve(GD.token); },
+      error_callback: er => reject(new Error(er && er.type ? 'Google sign-in: ' + er.type : 'Google sign-in was cancelled.'))
+    });
+    tc.requestAccessToken({ prompt: interactive ? '' : 'none' });
+  });
+}
+const DRIVE_NAME = 'scripture-journal-backup.json';
+async function driveUpload(blob, interactive) {
+  const token = await getToken(interactive);
+  const send = async id => {
+    const boundary = 'sjb' + Math.random().toString(16).slice(2);
+    const meta = JSON.stringify(id ? { name: DRIVE_NAME } : { name: DRIVE_NAME, mimeType: 'application/json' });
+    const body = new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n`, blob, `\r\n--${boundary}--`]);
+    return fetch(`https://www.googleapis.com/upload/drive/v3/files${id ? '/' + id : ''}?uploadType=multipart`, { method: id ? 'PATCH' : 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + boundary }, body });
+  };
+  let r = await send(S.gFileId);
+  if (r.status === 404 && S.gFileId) { S.gFileId = ''; r = await send(''); }
+  if (!r.ok) throw new Error('Google Drive upload failed (' + r.status + ').');
+  const j = await r.json(); S.gFileId = j.id; saveSettings();
+}
+let driveBusy = false, driveTimer;
+async function driveBackup(interactive) {
+  driveBusy = true;
+  try { await driveUpload(await buildBackup(!!S.driveAudio), interactive); S.dirty = false; S.lastDrive = Date.now(); saveSettings(); }
+  finally { driveBusy = false; }
+}
+async function driveRestore() {
+  const token = await getToken(true);
+  let id = S.gFileId;
+  if (!id) {
+    const q = encodeURIComponent(`name='${DRIVE_NAME}' and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&fields=files(id)`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Could not search Google Drive (' + r.status + ').');
+    id = ((await r.json()).files || [])[0]?.id;
+    if (!id) throw new Error('No backup found in your Google Drive.');
+    S.gFileId = id; saveSettings();
+  }
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error('Could not download the backup (' + r.status + ').');
+  return importBackup(await r.text());
+}
+function markDirty() { S.dirty = true; saveSettings(); clearTimeout(driveTimer); driveTimer = setTimeout(maybeAutoDrive, 45000); }
+function onWifiish() { const c = navigator.connection; if (!c) return true; if (c.type) return ['wifi', 'ethernet'].includes(c.type); return !c.saveData; }
+async function maybeAutoDrive() {
+  if (!S.autoDrive || !S.gClientId || !S.dirty || driveBusy || !navigator.onLine || !onWifiish()) return;
+  try { await driveBackup(false); } catch (err) { console.warn('Auto backup skipped:', err.message); }
+}
+window.addEventListener('online', () => setTimeout(maybeAutoDrive, 2000));
+
+/* =====================================================================
+   SETTINGS
+   ===================================================================== */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', ev => { ev.preventDefault(); installEvt = ev; const c = $('#installCard'); if (c) c.hidden = false; });
+function showSettings() {
+  setChrome({ title: 'Settings', tabs: true, active: 'settings' });
+  view.innerHTML = `
+    <section class="card" id="installCard"${installEvt ? '' : ' hidden'}><h2>Install</h2>
+      <p class="muted">Add Scripture Journal to your home screen so it opens like an app.</p><button class="btn primary" id="installBtn">Install app</button></section>
+    <section class="card"><h2>Word goal</h2>
+      <div class="row"><label>Goal (words)<input id="s_goal" type="number" inputmode="numeric" min="0"></label>
+      <label>Count words in<select id="s_scope"><option value="reflection">Reflection only</option><option value="reflection+prayer">Reflection + prayer</option><option value="all">All sections</option></select></label></div></section>
+    <section class="card"><h2>Backup</h2>
+      <p class="muted">Your entries live only on this phone. Clearing Chrome's site data or uninstalling the app erases them, so back up regularly.</p>
+      <label class="chk"><input type="checkbox" id="s_audio" checked> Include audio recordings (bigger file)</label>
+      <div class="stack">
+        <button class="btn primary" id="b_share">Save / share backup…</button>
+        <button class="btn" id="b_dl">Download backup file</button>
+        <label class="btn" for="b_file" style="color:var(--ink);font-size:15px">Restore from a backup file</label>
+        <input type="file" id="b_file" accept=".json,application/json" hidden>
+      </div>
+      <p class="muted">Tip: tap “Save / share backup…” and pick Google Drive to put a copy in your Drive while on Wi-Fi.</p>
+      <p class="muted" id="lastBackup"></p></section>
+    <section class="card"><details><summary>Automatic Google Drive sync (advanced)</summary>
+      <p class="muted">Needs a free Google Cloud “Web application” OAuth Client ID, with <b>${esc(location.origin)}</b> added as an authorized JavaScript origin. The app can only see the one backup file it creates.</p>
+      <label>OAuth Client ID<input id="g_cid" autocapitalize="off" autocomplete="off" placeholder="123456-abc.apps.googleusercontent.com"></label>
+      <label class="chk"><input type="checkbox" id="g_auto"> Back up automatically when online</label>
+      <label class="chk"><input type="checkbox" id="g_audio"> Include audio in the Drive backup</label>
+      <div class="stack"><button class="btn" id="g_now">Back up to Drive now</button><button class="btn" id="g_restore">Restore from Drive</button></div>
+      <p class="muted" id="g_last"></p></details></section>
+    <section class="card"><h2>Storage</h2><p class="muted" id="storeInfo">Checking…</p></section>`;
+  $('#s_goal').value = S.goal; $('#s_scope').value = S.scope;
+  $('#s_goal').oninput = ev => { S.goal = Math.max(0, parseInt(ev.target.value, 10) || 0); saveSettings(); };
+  $('#s_scope').onchange = ev => { S.scope = ev.target.value; saveSettings(); };
+  if ($('#installBtn')) $('#installBtn').onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => { }); installEvt = null; $('#installCard').hidden = true; };
+  const when = t => t ? new Date(t).toLocaleString('en-PH') : 'never';
+  const refreshLast = () => { $('#lastBackup').textContent = 'Last backup file: ' + when(S.lastBackup); $('#g_last').textContent = 'Last Drive backup: ' + when(S.lastDrive); };
+  const bk = async mode => {
+    try {
+      const blob = await buildBackup($('#s_audio').checked), name = `scripture-journal-backup_${stamp()}.json`;
+      const r = mode === 'share' ? await shareOrDownload(blob, name) : (download(blob, name), 'downloaded');
+      if (r !== 'cancelled') { S.lastBackup = Date.now(); saveSettings(); refreshLast(); toast(r === 'shared' ? 'Backup shared.' : 'Backup downloaded.'); }
+    } catch (err) { toast('Backup failed: ' + err.message); }
+  };
+  $('#b_share').onclick = () => bk('share'); $('#b_dl').onclick = () => bk('download');
+  $('#b_file').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    try { const r = await importBackup(await f.text()); toast(`Restored: ${r.added} added, ${r.updated} updated, ${r.same} unchanged.`); } catch (err) { toast('Restore failed: ' + err.message); }
+    ev.target.value = '';
+  };
+  $('#g_cid').value = S.gClientId; $('#g_auto').checked = S.autoDrive; $('#g_audio').checked = S.driveAudio;
+  $('#g_cid').onchange = ev => { S.gClientId = ev.target.value.trim(); GD.token = null; saveSettings(); };
+  $('#g_auto').onchange = ev => { S.autoDrive = ev.target.checked; saveSettings(); if (S.autoDrive) maybeAutoDrive(); };
+  $('#g_audio').onchange = ev => { S.driveAudio = ev.target.checked; saveSettings(); };
+  $('#g_now').onclick = async () => { try { toast('Backing up to Google Drive…'); await driveBackup(true); refreshLast(); toast('Backed up to Google Drive.'); } catch (err) { toast(err.message); } };
+  $('#g_restore').onclick = async () => { try { const r = await driveRestore(); toast(`Restored from Drive: ${r.added} added, ${r.updated} updated.`); } catch (err) { toast(err.message); } };
+  refreshLast();
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(({ usage, quota }) => {
+      const mb = n => (n / 1048576).toFixed(1) + ' MB';
+      $('#storeInfo').textContent = `${ENTRIES.length} entries · using ${mb(usage || 0)} of about ${mb(quota || 0)} available on this phone.`;
+    }).catch(() => { $('#storeInfo').textContent = ENTRIES.length + ' entries stored on this phone.'; });
+  } else $('#storeInfo').textContent = ENTRIES.length + ' entries stored on this phone.';
+}
+
+/* =====================================================================
+   START
+   ===================================================================== */
+document.addEventListener('visibilitychange', () => { if (document.hidden && E) { stopVoice().then(saveNow).catch(() => { }); } });
+window.addEventListener('pagehide', () => { if (E) saveNow(); });
+(async function init() {
+  await openDB();
+  ENTRIES = await dbAll('entries');
+  ENTRIES.forEach(e => { e.recordings = e.recordings || []; });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+  await route();
+  setTimeout(maybeAutoDrive, 4000);
+})().catch(err => { document.body.innerHTML = '<p style="padding:20px;font-family:system-ui">Scripture Journal could not open its storage: ' + esc(err && err.message) + '</p>'; });
+</script>
+</body>
+</html>
