@@ -175,7 +175,7 @@ function chapterOptions(book, sel) {
 /* ---------- settings ---------- */
 const DEFAULTS = {
   goal: 200, scope: 'reflection', lang: 'fil-PH', voiceMode: 'both', name: '', course: '',
-  gClientId: '', gFileId: '', autoDrive: true, deleted: {}, lastBackup: 0, lastDrive: 0, dirty: false,
+  gClientId: '', gFileId: '', lastInfo: '', autoDrive: true, deleted: {}, lastBackup: 0, lastDrive: 0, dirty: false,
   exSections: { scripture: true, reflection: true, prayer: true }, pageBreak: true
 };
 let S;
@@ -758,32 +758,46 @@ async function driveUpload(blob, interactive) {
   const j = await r.json(); S.gFileId = j.id; saveSettings();
 }
 let driveBusy = false, driveTimer, lastAutoSync = 0;
-async function driveFind(token) {
+async function driveList(token) {
   const q = encodeURIComponent(`name='${DRIVE_NAME}' and trashed=false`);
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&fields=files(id)`, { headers: { Authorization: 'Bearer ' + token } });
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=20&fields=files(id,modifiedTime)`, { headers: { Authorization: 'Bearer ' + token } });
   if (!r.ok) throw new Error('Could not search Google Drive (' + r.status + ').');
-  return ((await r.json()).files || [])[0]?.id || '';
+  return (await r.json()).files || [];
 }
-/* Two-way sync: download the Drive copy, merge it into this device, then upload the merged result. */
+async function driveWho(token) {
+  try {
+    const r = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) return ((await r.json()).user || {}).emailAddress || '';
+  } catch { }
+  return '';
+}
+/* Two-way sync: merge EVERY copy of the sync file found in Drive into this device,
+   upload the merged result to the newest copy, then remove stray duplicates. */
 async function driveSync(interactive) {
   if (driveBusy) return null;
   driveBusy = true;
   try {
     const token = await getToken(interactive);
-    let id = S.gFileId || await driveFind(token), res = { added: 0, updated: 0, removed: 0, same: 0 };
-    if (id) {
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
-      if (r.status === 404) { id = ''; S.gFileId = ''; }
-      else if (!r.ok) throw new Error('Could not download from Google Drive (' + r.status + ').');
-      else res = await importBackup(await r.text());
+    const files = await driveList(token), res = { added: 0, updated: 0, removed: 0, same: 0 };
+    for (const f of files) {
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) throw new Error('Could not download from Google Drive (' + r.status + ').');
+      const x = await importBackup(await r.text());
+      for (const k of Object.keys(res)) res[k] += x[k];
     }
-    S.gFileId = id; saveSettings();
+    S.gFileId = files.length ? files[0].id : '';
     await driveUpload(await buildBackup(true), interactive);
-    S.dirty = false; S.lastDrive = Date.now(); saveSettings();
-    return res;
+    for (const f of files.slice(1)) {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).catch(() => { });
+    }
+    const who = await driveWho(token);
+    S.dirty = false; S.lastDrive = Date.now();
+    S.lastInfo = `Google account: ${who || 'unknown'} · entries on this device: ${ENTRIES.length}` + (files.length > 1 ? ` · merged ${files.length} Drive copies into one` : '');
+    saveSettings();
+    return { ...res, who, files: files.length, total: ENTRIES.length };
   } finally { driveBusy = false; }
 }
-const syncMsg = r => (r.added + r.updated + r.removed) ? `Synced: ${r.added} new, ${r.updated} updated${r.removed ? ', ' + r.removed + ' deleted' : ''}.` : 'Synced. Everything is up to date.';
+const syncMsg = r => ((r.added + r.updated + r.removed) ? `Synced: ${r.added} new, ${r.updated} updated${r.removed ? ', ' + r.removed + ' deleted' : ''}.` : 'Synced. Nothing new from the other device.') + ` ${r.total} entries here` + (r.who ? ` · ${r.who}` : '') + '.';
 function markDirty() { S.dirty = true; saveSettings(); clearTimeout(driveTimer); driveTimer = setTimeout(() => maybeAutoDrive(true), 20000); }
 function onWifiish() { const c = navigator.connection; if (!c) return true; if (c.type) return ['wifi', 'ethernet'].includes(c.type); return !c.saveData; }
 async function maybeAutoDrive(force) {
@@ -836,7 +850,8 @@ function showSettings() {
   $('#s_scope').onchange = ev => { S.scope = ev.target.value; saveSettings(); };
   if ($('#installBtn')) $('#installBtn').onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => { }); installEvt = null; $('#installCard').hidden = true; };
   const when = t => t ? new Date(t).toLocaleString('en-PH') : 'never';
-  const refreshLast = () => { $('#lastBackup').textContent = 'Last backup file: ' + when(S.lastBackup); $('#g_last').textContent = 'Last sync: ' + when(S.lastDrive); };
+  const refreshLast = () => { $('#lastBackup').textContent = 'Last backup file: ' + when(S.lastBackup); $('#g_last').textContent = 'Last sync: ' + when(S.lastDrive) + (S.lastInfo ? '\n' + S.lastInfo : '');
+  $('#g_last').style.whiteSpace = 'pre-line'; };
   const bk = async mode => {
     try {
       const blob = await buildBackup($('#s_audio').checked), name = `scripture-journal-backup_${stamp()}.json`;
