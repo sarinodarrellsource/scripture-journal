@@ -175,12 +175,13 @@ function chapterOptions(book, sel) {
 /* ---------- settings ---------- */
 const DEFAULTS = {
   goal: 200, scope: 'reflection', lang: 'fil-PH', voiceMode: 'both', name: '', course: '',
-  gClientId: '', gFileId: '', autoDrive: false, driveAudio: false, lastBackup: 0, lastDrive: 0, dirty: false,
+  gClientId: '', gFileId: '', autoDrive: true, deleted: {}, lastBackup: 0, lastDrive: 0, dirty: false,
   exSections: { scripture: true, reflection: true, prayer: true }, pageBreak: true
 };
 let S;
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('sj.settings') || '{}') }; } catch { S = { ...DEFAULTS }; }
 S.exSections = { ...DEFAULTS.exSections, ...(S.exSections || {}) };
+S.deleted = S.deleted || {};
 const saveSettings = () => { try { localStorage.setItem('sj.settings', JSON.stringify(S)); } catch { } };
 const LANGS = [['fil-PH', 'Tagalog'], ['en-PH', 'English (Philippines)'], ['en-US', 'English (US)'], ['ceb-PH', 'Cebuano (may not be supported)']];
 const langName = c => (LANGS.find(l => l[0] === c) || [c, c])[1].replace(' (may not be supported)', '');
@@ -424,6 +425,7 @@ async function deleteEntry() {
   for (const r of e.recordings) await dbDel('audio', r.id).catch(() => { });
   await dbDel('entries', e.id);
   ENTRIES = ENTRIES.filter(x => x.id !== e.id);
+  S.deleted[e.id] = Date.now(); saveSettings();
   E.saved = false; E.entry = { ...e, id: '__deleted__', book: '', scripture: '', reflection: '', prayer: '', recordings: [] };
   markDirty();
   toast('Entry deleted');
@@ -680,21 +682,33 @@ async function buildBackup(includeAudio) {
       if (a && a.blob) audio.push({ id: r.id, entryId: e.id, mime: a.blob.type || r.mime, data: await blobToB64(a.blob) });
     }
   }
-  return new Blob([JSON.stringify({ app: 'scripture-journal', version: 1, exportedAt: new Date().toISOString(), entries: ENTRIES, audio })], { type: 'application/json' });
+  return new Blob([JSON.stringify({ app: 'scripture-journal', version: 1, exportedAt: new Date().toISOString(), entries: ENTRIES, deleted: S.deleted, audio })], { type: 'application/json' });
 }
 async function importBackup(text) {
   const j = JSON.parse(text);
   if (j.app !== 'scripture-journal' || !Array.isArray(j.entries)) throw new Error('This is not a Scripture Journal backup file.');
-  let added = 0, updated = 0, same = 0;
+  let added = 0, updated = 0, same = 0, removed = 0;
+  const editing = E && E.entry && E.entry.id;
+  for (const [id, ts] of Object.entries(j.deleted || {})) {
+    if ((S.deleted[id] || 0) < ts) S.deleted[id] = ts;
+    const cur = ENTRIES.find(e => e.id === id);
+    if (cur && id !== editing && (cur.updatedAt || 0) <= ts) {
+      for (const r of cur.recordings || []) await dbDel('audio', r.id).catch(() => { });
+      await dbDel('entries', id); ENTRIES = ENTRIES.filter(e => e.id !== id); removed++;
+    }
+  }
   for (const inc of j.entries) {
     inc.recordings = inc.recordings || [];
+    if ((S.deleted[inc.id] || 0) >= (inc.updatedAt || 0)) continue;
+    if (inc.id === editing) { same++; continue; }
     const cur = ENTRIES.find(e => e.id === inc.id);
     if (!cur) { await dbPut('entries', inc); ENTRIES.push(inc); added++; }
     else if ((inc.updatedAt || 0) > (cur.updatedAt || 0)) { await dbPut('entries', inc); ENTRIES[ENTRIES.indexOf(cur)] = inc; updated++; }
     else same++;
   }
   for (const a of (j.audio || [])) { if (!(await dbGet('audio', a.id))) await dbPut('audio', { id: a.id, entryId: a.entryId, blob: b64ToBlob(a.data, a.mime) }); }
-  return { added, updated, same };
+  saveSettings();
+  return { added, updated, same, removed };
 }
 const stamp = () => today();
 async function shareOrDownload(blob, name) {
@@ -743,34 +757,46 @@ async function driveUpload(blob, interactive) {
   if (!r.ok) throw new Error('Google Drive upload failed (' + r.status + ').');
   const j = await r.json(); S.gFileId = j.id; saveSettings();
 }
-let driveBusy = false, driveTimer;
-async function driveBackup(interactive) {
+let driveBusy = false, driveTimer, lastAutoSync = 0;
+async function driveFind(token) {
+  const q = encodeURIComponent(`name='${DRIVE_NAME}' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&fields=files(id)`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error('Could not search Google Drive (' + r.status + ').');
+  return ((await r.json()).files || [])[0]?.id || '';
+}
+/* Two-way sync: download the Drive copy, merge it into this device, then upload the merged result. */
+async function driveSync(interactive) {
+  if (driveBusy) return null;
   driveBusy = true;
-  try { await driveUpload(await buildBackup(!!S.driveAudio), interactive); S.dirty = false; S.lastDrive = Date.now(); saveSettings(); }
-  finally { driveBusy = false; }
-}
-async function driveRestore() {
-  const token = await getToken(true);
-  let id = S.gFileId;
-  if (!id) {
-    const q = encodeURIComponent(`name='${DRIVE_NAME}' and trashed=false`);
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&fields=files(id)`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) throw new Error('Could not search Google Drive (' + r.status + ').');
-    id = ((await r.json()).files || [])[0]?.id;
-    if (!id) throw new Error('No backup found in your Google Drive.');
+  try {
+    const token = await getToken(interactive);
+    let id = S.gFileId || await driveFind(token), res = { added: 0, updated: 0, removed: 0, same: 0 };
+    if (id) {
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
+      if (r.status === 404) { id = ''; S.gFileId = ''; }
+      else if (!r.ok) throw new Error('Could not download from Google Drive (' + r.status + ').');
+      else res = await importBackup(await r.text());
+    }
     S.gFileId = id; saveSettings();
-  }
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('Could not download the backup (' + r.status + ').');
-  return importBackup(await r.text());
+    await driveUpload(await buildBackup(true), interactive);
+    S.dirty = false; S.lastDrive = Date.now(); saveSettings();
+    return res;
+  } finally { driveBusy = false; }
 }
-function markDirty() { S.dirty = true; saveSettings(); clearTimeout(driveTimer); driveTimer = setTimeout(maybeAutoDrive, 45000); }
+const syncMsg = r => (r.added + r.updated + r.removed) ? `Synced: ${r.added} new, ${r.updated} updated${r.removed ? ', ' + r.removed + ' deleted' : ''}.` : 'Synced. Everything is up to date.';
+function markDirty() { S.dirty = true; saveSettings(); clearTimeout(driveTimer); driveTimer = setTimeout(() => maybeAutoDrive(true), 20000); }
 function onWifiish() { const c = navigator.connection; if (!c) return true; if (c.type) return ['wifi', 'ethernet'].includes(c.type); return !c.saveData; }
-async function maybeAutoDrive() {
-  if (!S.autoDrive || !S.gClientId || !S.dirty || driveBusy || !navigator.onLine || !onWifiish()) return;
-  try { await driveBackup(false); } catch (err) { console.warn('Auto backup skipped:', err.message); }
+async function maybeAutoDrive(force) {
+  if (!S.autoDrive || !S.gClientId || driveBusy || E || !navigator.onLine || !onWifiish()) return;
+  if (!force && Date.now() - lastAutoSync < 60000) return;
+  lastAutoSync = Date.now();
+  try {
+    const r = await driveSync(false);
+    if (r && (r.added + r.updated + r.removed)) { toast(syncMsg(r)); if (!E && (location.hash || '#list') === '#list') showList(); }
+  } catch (err) { console.warn('Auto sync skipped:', err.message); if (!S.lastDrive || Date.now() - S.lastDrive > 864e5) toast('Sync paused. Open Settings and tap “Sync now”.'); }
 }
 window.addEventListener('online', () => setTimeout(maybeAutoDrive, 2000));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) maybeAutoDrive(); });
 
 /* =====================================================================
    SETTINGS
@@ -794,22 +820,23 @@ function showSettings() {
         <label class="btn" for="b_file" style="color:var(--ink);font-size:15px">Restore from a backup file</label>
         <input type="file" id="b_file" accept=".json,application/json" hidden>
       </div>
-      <p class="muted">Tip: tap “Save / share backup…” and pick Google Drive to put a copy in your Drive while on Wi-Fi.</p>
+      <p class="muted">To restore on another device, move the file there and use “Restore from a backup file”. Setting up Sync (below) avoids all of this.</p>
       <p class="muted" id="lastBackup"></p></section>
-    <section class="card"><details><summary>Automatic Google Drive sync (advanced)</summary>
-      <p class="muted">Needs a free Google Cloud “Web application” OAuth Client ID, with <b>${esc(location.origin)}</b> added as an authorized JavaScript origin. The app can only see the one backup file it creates.</p>
-      <label>OAuth Client ID<input id="g_cid" autocapitalize="off" autocomplete="off" placeholder="123456-abc.apps.googleusercontent.com"></label>
-      <label class="chk"><input type="checkbox" id="g_auto"> Back up automatically when online</label>
-      <label class="chk"><input type="checkbox" id="g_audio"> Include audio in the Drive backup</label>
-      <div class="stack"><button class="btn" id="g_now">Back up to Drive now</button><button class="btn" id="g_restore">Restore from Drive</button></div>
-      <p class="muted" id="g_last"></p></details></section>
+    <section class="card"><h2>Sync between devices</h2>
+      <p class="muted">Keeps your phone and computer in step through one file in your Google Drive. Use the <b>same Google account</b> and the <b>same Client ID</b> on both devices. Edits, new entries, recordings and deletions all travel both ways.</p>
+      <details><summary>How to get a Client ID (free, one time)</summary>
+        <p class="muted">1. On a computer, open console.cloud.google.com and create a project.<br>2. APIs &amp; Services → Library → enable <b>Google Drive API</b>.<br>3. OAuth consent screen: choose External, fill in an app name, and add your Gmail as a Test user.<br>4. Credentials → Create credentials → OAuth client ID → <b>Web application</b>. Under Authorized JavaScript origins add <b>${esc(location.origin)}</b>.<br>5. Copy the Client ID and paste it below, on every device.</p></details>
+      <label style="margin-top:10px">OAuth Client ID<input id="g_cid" autocapitalize="off" autocomplete="off" placeholder="123456-abc.apps.googleusercontent.com"></label>
+      <label class="chk"><input type="checkbox" id="g_auto"> Sync automatically (on open and after changes, when online)</label>
+      <div class="stack"><button class="btn primary" id="g_now">Sync now</button></div>
+      <p class="muted" id="g_last"></p></section>
     <section class="card"><h2>Storage</h2><p class="muted" id="storeInfo">Checking…</p></section>`;
   $('#s_goal').value = S.goal; $('#s_scope').value = S.scope;
   $('#s_goal').oninput = ev => { S.goal = Math.max(0, parseInt(ev.target.value, 10) || 0); saveSettings(); };
   $('#s_scope').onchange = ev => { S.scope = ev.target.value; saveSettings(); };
   if ($('#installBtn')) $('#installBtn').onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(() => { }); installEvt = null; $('#installCard').hidden = true; };
   const when = t => t ? new Date(t).toLocaleString('en-PH') : 'never';
-  const refreshLast = () => { $('#lastBackup').textContent = 'Last backup file: ' + when(S.lastBackup); $('#g_last').textContent = 'Last Drive backup: ' + when(S.lastDrive); };
+  const refreshLast = () => { $('#lastBackup').textContent = 'Last backup file: ' + when(S.lastBackup); $('#g_last').textContent = 'Last sync: ' + when(S.lastDrive); };
   const bk = async mode => {
     try {
       const blob = await buildBackup($('#s_audio').checked), name = `scripture-journal-backup_${stamp()}.json`;
@@ -823,12 +850,17 @@ function showSettings() {
     try { const r = await importBackup(await f.text()); toast(`Restored: ${r.added} added, ${r.updated} updated, ${r.same} unchanged.`); } catch (err) { toast('Restore failed: ' + err.message); }
     ev.target.value = '';
   };
-  $('#g_cid').value = S.gClientId; $('#g_auto').checked = S.autoDrive; $('#g_audio').checked = S.driveAudio;
-  $('#g_cid').onchange = ev => { S.gClientId = ev.target.value.trim(); GD.token = null; saveSettings(); };
-  $('#g_auto').onchange = ev => { S.autoDrive = ev.target.checked; saveSettings(); if (S.autoDrive) maybeAutoDrive(); };
-  $('#g_audio').onchange = ev => { S.driveAudio = ev.target.checked; saveSettings(); };
-  $('#g_now').onclick = async () => { try { toast('Backing up to Google Drive…'); await driveBackup(true); refreshLast(); toast('Backed up to Google Drive.'); } catch (err) { toast(err.message); } };
-  $('#g_restore').onclick = async () => { try { const r = await driveRestore(); toast(`Restored from Drive: ${r.added} added, ${r.updated} updated.`); } catch (err) { toast(err.message); } };
+  $('#g_cid').value = S.gClientId; $('#g_auto').checked = S.autoDrive;
+  if (S.gClientId) loadGIS().catch(() => { });
+  $('#g_cid').onchange = ev => { S.gClientId = ev.target.value.trim(); GD.token = null; S.gFileId = ''; saveSettings(); };
+  $('#g_auto').onchange = ev => { S.autoDrive = ev.target.checked; saveSettings(); };
+  $('#g_now').onclick = async () => {
+    S.gClientId = $('#g_cid').value.trim(); saveSettings();
+    const b = $('#g_now'); b.disabled = true; b.textContent = 'Syncing…';
+    try { const r = await driveSync(true); toast(r ? syncMsg(r) : 'A sync is already running.'); refreshLast(); }
+    catch (err) { toast(err.message); }
+    b.disabled = false; b.textContent = 'Sync now';
+  };
   refreshLast();
   if (navigator.storage && navigator.storage.estimate) {
     navigator.storage.estimate().then(({ usage, quota }) => {
@@ -849,7 +881,7 @@ window.addEventListener('pagehide', () => { if (E) saveNow(); });
   ENTRIES.forEach(e => { e.recordings = e.recordings || []; });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
   await route();
-  setTimeout(maybeAutoDrive, 4000);
+  setTimeout(() => maybeAutoDrive(true), 3000);
 })().catch(err => { document.body.innerHTML = '<p style="padding:20px;font-family:system-ui">Scripture Journal could not open its storage: ' + esc(err && err.message) + '</p>'; });
 </script>
 </body>

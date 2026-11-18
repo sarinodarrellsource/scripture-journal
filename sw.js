@@ -1,5 +1,5 @@
 /* Scripture Journal — service worker: makes the app load with no internet. */
-const CACHE = 'scripture-journal-v1';
+const CACHE = 'scripture-journal-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
